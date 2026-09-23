@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sesli Sohbet</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="join-screen" class="screen">
+    <h1>🎙️ Sesli Sohbet</h1>
+    <input id="name-input" type="text" placeholder="Adın" />
+    <input id="room-input" type="text" placeholder="Oda adı (örn: arkadaslar)" />
+    <button id="join-btn">Odaya Katıl</button>
+    <p id="status"></p>
+  </div>
+
+  <div id="room-screen" class="screen hidden">
+    <h2 id="room-title"></h2>
+    <ul id="user-list"></ul>
+    <button id="mute-btn">🔇 Sessize Al</button>
+    <button id="leave-btn">Odadan Ayrıl</button>
+    <div id="audio-container"></div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
