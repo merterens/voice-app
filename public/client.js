@@ -4,9 +4,28 @@ let localStream = null;
 let myName = '';
 let myRoom = '';
 const peers = {}; // socketId -> RTCPeerConnection
+const userVolumes = {}; // socketId -> 0-2 arası ses seviyesi (1 = normal)
 
 const config = {
-  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    // Open Relay Project'in ücretsiz TURN sunucusu (test/küçük ölçek için yeterli)
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+  ],
 };
 
 const joinScreen = document.getElementById('join-screen');
@@ -40,7 +59,7 @@ async function joinRoom() {
   joinScreen.classList.add('hidden');
   roomScreen.classList.remove('hidden');
   roomTitle.textContent = `Oda: ${myRoom}`;
-  addUserToList(socket.id, myName + ' (sen)');
+  addUserToList(socket.id, myName + ' (sen)', true);
 
   socket.emit('join-room', { room: myRoom, name: myName });
 }
@@ -116,6 +135,7 @@ function createPeerConnection(id, isInitiator) {
       audioContainer.appendChild(audioEl);
     }
     audioEl.srcObject = event.streams[0];
+    audioEl.volume = userVolumes[id] !== undefined ? userVolumes[id] : 1;
   };
 
   if (isInitiator) {
@@ -128,11 +148,37 @@ function createPeerConnection(id, isInitiator) {
   return pc;
 }
 
-function addUserToList(id, name) {
+function addUserToList(id, name, isSelf = false) {
   if (document.getElementById('user-' + id)) return;
   const li = document.createElement('li');
   li.id = 'user-' + id;
-  li.textContent = name;
+
+  const nameSpan = document.createElement('span');
+  nameSpan.textContent = name;
+  li.appendChild(nameSpan);
+
+  if (!isSelf) {
+    userVolumes[id] = 1;
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '2';
+    slider.step = '0.05';
+    slider.value = '1';
+    slider.className = 'volume-slider';
+    slider.title = 'Bu kişinin sesini ayarla';
+
+    slider.addEventListener('input', (e) => {
+      const vol = parseFloat(e.target.value);
+      userVolumes[id] = vol;
+      const audioEl = document.getElementById('audio-' + id);
+      if (audioEl) audioEl.volume = vol;
+    });
+
+    li.appendChild(slider);
+  }
+
   userList.appendChild(li);
 }
 
