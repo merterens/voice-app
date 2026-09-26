@@ -58,6 +58,15 @@ button:hover {
   background: #35373c;
   margin-bottom: 4px;
   border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.volume-slider {
+  width: 100px;
+  accent-color: #5865f2;
 }
 
 #status {
