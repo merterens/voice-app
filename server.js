@@ -47,6 +47,13 @@ io.on('connection', (socket) => {
     io.to(to).emit('ice-candidate', { from: socket.id, candidate });
   });
 
+  // Ekran paylaşımı bitince odadakilere haber ver (videoyu kaldırsınlar)
+  socket.on('screen-stopped', () => {
+    if (currentRoom) {
+      socket.to(currentRoom).emit('screen-stopped', { id: socket.id });
+    }
+  });
+
   socket.on('disconnect', () => {
     if (currentRoom && rooms[currentRoom]) {
       delete rooms[currentRoom][socket.id];
