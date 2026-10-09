@@ -35,7 +35,13 @@ const userList = document.getElementById('user-list');
 const audioContainer = document.getElementById('audio-container');
 const roomTitle = document.getElementById('room-title');
 const muteBtn = document.getElementById('mute-btn');
+const screenBtn = document.getElementById('screen-btn');
+const videoContainer = document.getElementById('video-container');
 
+let screenStream = null; // şu an paylaştığımız ekran
+const screenSenders = {}; // socketId -> RTCRtpSender (ekran videosunu göndermek için)
+
+screenBtn.addEventListener('click', toggleScreenShare);
 document.getElementById('join-btn').addEventListener('click', joinRoom);
 document.getElementById('leave-btn').addEventListener('click', () => location.reload());
 muteBtn.addEventListener('click', toggleMute);
@@ -106,10 +112,17 @@ socket.on('user-left', ({ id }) => {
     peers[id].close();
     delete peers[id];
   }
+  delete screenSenders[id];
+  removeRemoteVideo(id);
   const audioEl = document.getElementById('audio-' + id);
   if (audioEl) audioEl.remove();
   const li = document.getElementById('user-' + id);
   if (li) li.remove();
+});
+
+// Karşı taraf ekran paylaşımını bitirdi
+socket.on('screen-stopped', ({ id }) => {
+  removeRemoteVideo(id);
 });
 
 function createPeerConnection(id, isInitiator) {
@@ -120,6 +133,12 @@ function createPeerConnection(id, isInitiator) {
 
   localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
+  // Biz ekran paylaşıyorsak, sonradan katılan kişi de görsün
+  if (screenStream) {
+    const videoTrack = screenStream.getVideoTracks()[0];
+    if (videoTrack) screenSenders[id] = pc.addTrack(videoTrack, screenStream);
+  }
+
   pc.onicecandidate = (event) => {
     if (event.candidate) {
       socket.emit('ice-candidate', { to: id, candidate: event.candidate });
@@ -127,6 +146,12 @@ function createPeerConnection(id, isInitiator) {
   };
 
   pc.ontrack = (event) => {
+    // Video geldiyse bu bir ekran paylaşımıdır
+    if (event.track.kind === 'video') {
+      showRemoteVideo(id, event.streams[0]);
+      return;
+    }
+
     let audioEl = document.getElementById('audio-' + id);
     if (!audioEl) {
       audioEl = document.createElement('audio');
@@ -187,4 +212,91 @@ function toggleMute() {
   const track = localStream.getAudioTracks()[0];
   track.enabled = !track.enabled;
   muteBtn.textContent = track.enabled ? '🔇 Sessize Al' : '🔊 Sesi Aç';
+}
+
+// ---------- Ekran paylaşımı ----------
+
+async function toggleScreenShare() {
+  if (screenStream) {
+    stopScreenShare();
+    return;
+  }
+
+  try {
+    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+  } catch (err) {
+    console.error('Ekran paylaşımı başlatılamadı', err);
+    return;
+  }
+
+  const videoTrack = screenStream.getVideoTracks()[0];
+  // Tarayıcının kendi "Paylaşımı durdur" butonuna basılırsa da temizle
+  videoTrack.onended = stopScreenShare;
+
+  // Odadaki herkese videoyu ekle ve yeniden anlaş (renegotiation)
+  for (const [id, pc] of Object.entries(peers)) {
+    screenSenders[id] = pc.addTrack(videoTrack, screenStream);
+    await renegotiate(id, pc);
+  }
+
+  screenBtn.textContent = '⏹️ Paylaşımı Durdur';
+}
+
+async function stopScreenShare() {
+  if (!screenStream) return;
+
+  screenStream.getTracks().forEach((t) => t.stop());
+  screenStream = null;
+
+  for (const [id, sender] of Object.entries(screenSenders)) {
+    const pc = peers[id];
+    if (pc && pc.signalingState !== 'closed') {
+      try {
+        pc.removeTrack(sender);
+        await renegotiate(id, pc);
+      } catch (e) {
+        console.error('Track kaldırılamadı', e);
+      }
+    }
+    delete screenSenders[id];
+  }
+
+  socket.emit('screen-stopped');
+  screenBtn.textContent = '🖥️ Ekranı Paylaş';
+}
+
+async function renegotiate(id, pc) {
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  socket.emit('offer', { to: id, offer });
+}
+
+function showRemoteVideo(id, stream) {
+  let wrapper = document.getElementById('video-wrap-' + id);
+  if (!wrapper) {
+    wrapper = document.createElement('div');
+    wrapper.id = 'video-wrap-' + id;
+
+    const label = document.createElement('div');
+    label.className = 'video-label';
+    const userLi = document.getElementById('user-' + id);
+    const name = userLi ? userLi.querySelector('span').textContent : 'Biri';
+    label.textContent = `🖥️ ${name} ekranını paylaşıyor`;
+
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.playsInline = true;
+    video.controls = true;
+    video.muted = true; // ses zaten ayrı <audio> elementinden geliyor
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(video);
+    videoContainer.appendChild(wrapper);
+  }
+  wrapper.querySelector('video').srcObject = stream;
+}
+
+function removeRemoteVideo(id) {
+  const wrapper = document.getElementById('video-wrap-' + id);
+  if (wrapper) wrapper.remove();
 }

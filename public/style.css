@@ -21,6 +21,25 @@ body {
   display: none;
 }
 
+#room-screen {
+  width: min(720px, 95vw);
+}
+
+#video-container video {
+  width: 100%;
+  max-height: 60vh;
+  background: #000;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.video-label {
+  font-size: 0.85rem;
+  color: #b5bac1;
+  text-align: left;
+  margin: 0.5rem 0 0.2rem;
+}
+
 input {
   display: block;
   width: 100%;
